@@ -1,0 +1,85 @@
+service: blog-service-new
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: us-east-1
+  stage: dev
+  stackName: Blog-Service-New
+  role: arn:aws:iam::050752626146:role/ExecutionRoleForS3AndLambda
+  memorySize: 1024
+  timeout: 29
+  versionFunctions: false
+  endpointType: regional
+  tracing:
+    lambda: true
+  stackTags:
+    environment: dev
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - lambda:InvokeFunction
+      Resource: "*"
+functions:
+  AddNewBlog:
+    handler: handler.addNewBlog
+    description: Add New Blog function
+    name: add-new-blog
+    environment:
+      XRAY_ENABLED: true
+      STAGE: dev
+      DATABASE_URL: mongodb+srv://vishwakarma137:nQc7HjtfDSaB19Db@blog-app.a414a.mongodb.net/?retryWrites=true&w=majority&appName=Blog-App
+      DB_NAME: blogs
+      JWT_KEY: secret
+    events:
+      - http:
+          path: /blog
+          method: post
+          cors: true
+          authorizer:
+            arn: arn:aws:lambda:us-east-1:050752626146:function:authorizer-test-dev-authorizeJwtToken
+  GetAllBlogs:
+    handler: handler.getAllBlogs
+    description: Get all blogs function
+    name: get-all-blogs
+    environment:
+      XRAY_ENABLED: true
+      STAGE: dev
+      DATABASE_URL: mongodb+srv://vishwakarma137:nQc7HjtfDSaB19Db@blog-app.a414a.mongodb.net/?retryWrites=true&w=majority&appName=Blog-App
+      DB_NAME: blogs
+      JWT_KEY: secret
+    events:
+      - http:
+          path: /blog
+          method: get
+          cors: true
+          authorizer:
+            arn: arn:aws:lambda:us-east-1:050752626146:function:authorizer-test-dev-authorizeJwtToken
+resources:
+  Resources:
+    GatewayResponseDefault4XX:
+      Type: "AWS::ApiGateway::GatewayResponse"
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: "ApiGatewayRestApi"
+    GatewayResponseDEFAULT5XX:
+      Type: "AWS::ApiGateway::GatewayResponse"
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+        ResponseType: DEFAULT_5XX
+        RestApiId:
+          Ref: "ApiGatewayRestApi"
+package:
+  exclude:
+    - coverage/**
+    - test/**
+    - package-lock.json
+    - .npm/**
+    - .idea/**
