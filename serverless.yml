@@ -21,6 +21,13 @@ provider:
       Action:
         - lambda:InvokeFunction
       Resource: "*"
+    - Effect: Allow
+      Action:
+        - "sns:Publish"
+        - "sqs:SendMessage"
+      Resource:
+        - { "Fn::GetAtt": ["BlogQueue", "Arn"] }
+        - { "Fn::GetAtt": ["BlogSnsTopic", "Arn"] }
 functions:
   AddNewBlog:
     handler: handler.addNewBlog
@@ -32,6 +39,7 @@ functions:
       DATABASE_URL: mongodb+srv://vishwakarma137:nQc7HjtfDSaB19Db@blog-app.a414a.mongodb.net/?retryWrites=true&w=majority&appName=Blog-App
       DB_NAME: blogs
       JWT_KEY: secret
+      SNS_TOPIC_ARN: arn:aws:sns:us-east-1:050752626146:BlogSnsTopic
     events:
       - http:
           path: /blog
@@ -56,6 +64,48 @@ functions:
           cors: true
           authorizer:
             arn: arn:aws:lambda:us-east-1:050752626146:function:authorizer-test-dev-authorizeJwtToken
+  GetBlogById:
+    handler: handler.getBlogById
+    description: Get blog by id function
+    name: get-blog-by-id
+    environment:
+      XRAY_ENABLED: true
+      STAGE: dev
+      DATABASE_URL: mongodb+srv://vishwakarma137:nQc7HjtfDSaB19Db@blog-app.a414a.mongodb.net/?retryWrites=true&w=majority&appName=Blog-App
+      DB_NAME: blogs
+      JWT_KEY: secret
+    events:
+      - http:
+          path: /blog/{id}
+          method: get
+          cors: true
+          authorizer:
+            arn: arn:aws:lambda:us-east-1:050752626146:function:authorizer-test-dev-authorizeJwtToken
+  DeleteBlog:
+    handler: handler.deleteBlog
+    description: Delete blog function
+    name: delete-blog
+    environment:
+      XRAY_ENABLED: true
+      STAGE: dev
+      DATABASE_URL: mongodb+srv://vishwakarma137:nQc7HjtfDSaB19Db@blog-app.a414a.mongodb.net/?retryWrites=true&w=majority&appName=Blog-App
+      DB_NAME: blogs
+      JWT_KEY: secret
+    events:
+      - http:
+          path: /blog/{id}
+          method: delete
+          cors: true
+          authorizer:
+            arn: arn:aws:lambda:us-east-1:050752626146:function:authorizer-test-dev-authorizeJwtToken
+  ProcessBlogQueue:
+    handler: handler.processBlogQueue
+    description: Process Blog Queue function
+    events:
+      - sqs:
+          arn:
+            "Fn::GetAtt": ["BlogQueue", "Arn"]
+          batchSize: 10
 resources:
   Resources:
     GatewayResponseDefault4XX:
@@ -76,6 +126,58 @@ resources:
         ResponseType: DEFAULT_5XX
         RestApiId:
           Ref: "ApiGatewayRestApi"
+    BlogSnsTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: "BlogSnsTopic"
+    BlogQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: "BlogQueue"
+        VisibilityTimeout: 30
+    BlogQueueSubscription:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn:
+          Ref: BlogSnsTopic
+        Protocol: "sqs"
+        Endpoint:
+          "Fn::GetAtt": ["BlogQueue", "Arn"]
+    BlogQueuePolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues:
+          - Ref: BlogQueue
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - "sqs:SendMessage"
+              Principal: "*"
+              Resource:
+                "Fn::GetAtt": ["BlogQueue", "Arn"]
+              Condition:
+                ArnEquals:
+                  aws:SourceArn:
+                    Ref: BlogSnsTopic
+    SnsToSqsSubscription:
+      Type: "AWS::SNS::Subscription"
+      Properties:
+        TopicArn:
+          Ref: BlogSnsTopic
+        Protocol: "sqs"
+        Endpoint:
+          "Fn::GetAtt": ["BlogQueue", "Arn"]
+  Outputs:
+    BlogSnsTopicArn:
+      Description: Blog Topic ARN for SNS topic
+      Value:
+        Ref: BlogSnsTopic
+    BlogQueueArn:
+      Description: Blog Queue ARN for SQS queue
+      Value:
+        "Fn::GetAtt": ["BlogQueue", "Arn"]
 package:
   exclude:
     - coverage/**
